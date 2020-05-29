@@ -48,12 +48,14 @@ const createSagaMiddleware = () => {
                     break;
                 case 'PUT':
                     dispatch(effect.action);
-                    next();
+                    next(effect.action);
                     break;
                 case 'FORK':
                     const newTask = effect.task(...effect.args);
-                    run(newTask); // 通过saga开启的新任务，肯定是generator函数返回值，所以要用run来真正开启
                     next(newTask); // 将newTask返回，然后可以通过CANCEL effect进行取消。
+                    setTimeout(() => {
+                        run(newTask); // 通过saga开启的新任务，肯定是generator函数返回值，所以要用run来真正开启
+                    })
                     break;
                 case 'CALL':
                     ({
@@ -76,6 +78,9 @@ const createSagaMiddleware = () => {
                 case 'CANCEL':
                     effect.task.return();
                     next();
+                    break;
+                case 'CANCELLED':
+                    next(false);
                     break;
                 case 'CPS':
                     ({
@@ -139,7 +144,7 @@ const createSagaMiddleware = () => {
                     }
                     break;
                 case 'DELAY':
-                    setTimeout(() => next(), effect.wait);
+                    setTimeout(() => next(true), effect.wait);
                     break;
                 case 'SELECT':
                     const {
@@ -156,13 +161,19 @@ const createSagaMiddleware = () => {
         const run = (generator, callback) => {
             const it = typeof generator[Symbol.iterator] == 'function' ? generator : generator();
             fromRace && fromRaceGen.add(it);
+            let recursiveCount = 0;
             const next = (nextValue) => {
+                ++recursiveCount;
+                if (recursiveCount >= 1000)
+                    return;
                 const {
                     done,
                     value: effect
                 } = it.next(nextValue);
                 if (!done) {
-                    if (typeof effect[Symbol.iterator] == 'function') {
+                    if (!effect) {
+                        next(effect);
+                    } else if (typeof effect[Symbol.iterator] == 'function') {
                         run(effect, next);
                     } else if (typeof effect.then == 'function') {
                         effect.then(next);

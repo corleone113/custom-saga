@@ -75,3 +75,8 @@ export function cancel(task) {
         task
     }
 }
+export function cancelled(){
+    return {
+        type: 'CANCELLED',
+    }
+}
