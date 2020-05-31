@@ -1,3 +1,56 @@
+import {
+    transform
+} from '@babel/core'; // 错误提示做得比babylon好一点
+import * as t from '@babel/types';
+import * as effectRoot from './effects';
+const finalTaskPlugin = { // 将finally语句中的代码转化一个等效的函数表达式
+    visitor: {
+        FunctionDeclaration(path) {
+            const {
+                parent: {
+                    type
+                },
+                node: {
+                    generator,
+                    params,
+                },
+            } = path;
+            if (type === 'Program' && generator) {
+                path.traverse({
+                    TryStatement(tryPath) {
+                        const {
+                            finalizer
+                        } = tryPath.node
+                        if (finalizer && finalizer.body.length > 0) {
+                            const finalGen = t.functionExpression(null,params,t.blockStatement(finalizer.body),true)
+                            path.replaceWith(finalGen);
+                            path.traverse({
+                                MemberExpression(memberPath){
+                                    const { node: {object:{name},}, parentPath, parent:{type}} = memberPath;
+                                    if(/__WEBPACK_IMPORTED_MODULE_/.test(name)){
+                                        const {node: {property:{extra: {rawValue}}},} = memberPath
+                                        if(type === 'CallExpression') {
+                                            if(rawValue === 'cancelled'){
+                                                parentPath.replaceWith(t.arrowFunctionExpression([],t.booleanLiteral(true)))
+                                            }else{
+                                                parentPath.replaceWith(t.identifier(`this.${rawValue}`));
+                                            }
+                                        }
+                                        if(type === 'ObjectProperty') {
+                                            memberPath.replaceWith(t.stringLiteral(rawValue));
+                                        }
+                                    }
+                                }
+                            })
+                        }
+                    },
+                },);
+            } else {
+                path.replaceWith([]);
+            }
+        }
+    }
+}
 const createChannel = () => {
     const observer = {};
 
@@ -40,7 +93,7 @@ const createSagaMiddleware = () => {
         }
         const fromRaceGen = new Set();
         let fromRace = false;
-        const handleEffect = (effect, next) => {
+        const handleEffect = (effect, next, currentTask) => {
             let first, args, fn, context;
             switch (effect.type) {
                 case 'TAKE':
@@ -55,10 +108,17 @@ const createSagaMiddleware = () => {
                         task, args: a
                     } = effect;
                     const newTask = task.call(effect, ...a);
+                    // eslint-disable-next-line no-eval
+                    const gen = eval(transform(task.toString(), {
+                        plugins: [
+                            finalTaskPlugin,
+                        ]
+                    }).code);
+                    gen && (newTask.gen = gen.bind(effectRoot, ...a));
+                    next(newTask); // 将newTask返回，然后可以通过CANCEL effect进行取消。
                     run(newTask, {
                         fromFork: true,
                     }); // 通过saga开启的新任务，肯定是generator函数返回值，所以要用run来真正开启
-                    next(newTask); // 将newTask返回，然后可以通过CANCEL effect进行取消。
                     break;
                 case 'CALL':
                     ({
@@ -81,9 +141,13 @@ const createSagaMiddleware = () => {
                     }
                     break;
                 case 'CANCEL':
+                    effect.task.cancelled = true;
                     setTimeout(() => {
                         effect.task.return();
-                        effect.task.next(true);
+                        const {gen: g} = effect.task;
+                        if(typeof g === 'function'){
+                            run(g);
+                        }
                     })
                     next();
                     break;
@@ -131,10 +195,14 @@ const createSagaMiddleware = () => {
                             next(isArr ? arr : {
                                 [k]: v
                             });
+                            const genCache = []
                             fromRaceGen.forEach(g => {
                                 g.return();
-                                fromRaceGen.delete(g);
+                                genCache.push(g);
                             });
+                            for(const g of genCache){
+                                fromRaceGen.delete(g);
+                            }
                         }
                         fromRace = true;
                         if (Array.isArray(effects)) {
@@ -153,7 +221,7 @@ const createSagaMiddleware = () => {
                     }
                     break;
                 case 'DELAY':
-                    setTimeout(() => next(true), effect.wait);
+                    setTimeout(() => {!currentTask.cancelled && next(true);}, effect.wait);
                     break;
                 case 'SELECT':
                     const {
@@ -195,7 +263,7 @@ const createSagaMiddleware = () => {
                         } else if (!effect.type) {
                             next(effect);
                         } else {
-                            handleEffect(effect, next);
+                            handleEffect(effect, next, it);
                         }
                     } else if (typeof callback === 'function') {
                         callback(effect)

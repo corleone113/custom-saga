@@ -32,12 +32,13 @@ export function fork(task, ...args) {
 }
 // takeEvery相当于要开启一个新的子例程，单独监听actionType
 export function* takeEvery(actionType, gen) {
-    const ret = yield fork(function* () {
+    function* inner(){ // 避免转码器无法识别
         while (true) {
             yield take(actionType)
             yield fork(gen);
         }
-    })
+    }
+    const ret = yield fork(inner)
     return ret;
 }
 export function call(first, ...args) {
