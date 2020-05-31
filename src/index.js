@@ -3,7 +3,7 @@ import {
 } from '@babel/core'; // 错误提示做得比babylon好一点
 import * as t from '@babel/types';
 import * as effectRoot from './effects';
-const finalTaskPlugin = { // 将finally语句中的代码转化一个等效的函数表达式
+const finalTaskPlugin = {
     visitor: {
         FunctionDeclaration(path) {
             const {
@@ -22,21 +22,39 @@ const finalTaskPlugin = { // 将finally语句中的代码转化一个等效的�
                             finalizer
                         } = tryPath.node
                         if (finalizer && finalizer.body.length > 0) {
-                            const finalGen = t.functionExpression(null,params,t.blockStatement(finalizer.body),true)
+                            const finalGen = t.functionExpression(null, params, t.blockStatement(finalizer.body), true)
                             path.replaceWith(finalGen);
                             path.traverse({
-                                MemberExpression(memberPath){
-                                    const { node: {object:{name},}, parentPath, parent:{type}} = memberPath;
-                                    if(/__WEBPACK_IMPORTED_MODULE_/.test(name)){
-                                        const {node: {property:{extra: {rawValue}}},} = memberPath
-                                        if(type === 'CallExpression') {
-                                            if(rawValue === 'cancelled'){
-                                                parentPath.replaceWith(t.arrowFunctionExpression([],t.booleanLiteral(true)))
-                                            }else{
+                                MemberExpression(memberPath) {
+                                    const {
+                                        node: {
+                                            object: {
+                                                name
+                                            },
+                                        },
+                                        parentPath,
+                                        parent: {
+                                            type
+                                        }
+                                    } = memberPath;
+                                    if (/__WEBPACK_IMPORTED_MODULE_/.test(name)) {
+                                        const {
+                                            node: {
+                                                property: {
+                                                    extra: {
+                                                        rawValue
+                                                    }
+                                                }
+                                            },
+                                        } = memberPath
+                                        if (type === 'CallExpression') {
+                                            if (rawValue === 'cancelled') {
+                                                parentPath.replaceWith(t.arrowFunctionExpression([], t.booleanLiteral(true)))
+                                            } else {
                                                 parentPath.replaceWith(t.identifier(`this.${rawValue}`));
                                             }
                                         }
-                                        if(type === 'ObjectProperty') {
+                                        if (type === 'ObjectProperty') {
                                             memberPath.replaceWith(t.stringLiteral(rawValue));
                                         }
                                     }
@@ -44,7 +62,7 @@ const finalTaskPlugin = { // 将finally语句中的代码转化一个等效的�
                             })
                         }
                     },
-                },);
+                }, );
             } else {
                 path.replaceWith([]);
             }
@@ -141,17 +159,19 @@ const createSagaMiddleware = () => {
                     }
                     break;
                 case 'CANCEL':
-                    effect.task.cancelled = true;
                     setTimeout(() => {
                         effect.task.return();
-                        const {gen: g} = effect.task;
-                        if(typeof g === 'function'){
-                            run(g);
-                        }
-                    })
+                        effect.task.cancelled = true;
+                    }, );
                     next();
                     break;
                 case 'CANCELLED':
+                    const {
+                        cancelled, gen: g
+                    } = currentTask;
+                    if (cancelled && typeof g === 'function') {
+                        run(g);
+                    }
                     next(false);
                     break;
                 case 'CPS':
@@ -200,7 +220,7 @@ const createSagaMiddleware = () => {
                                 g.return();
                                 genCache.push(g);
                             });
-                            for(const g of genCache){
+                            for (const g of genCache) {
                                 fromRaceGen.delete(g);
                             }
                         }
@@ -221,7 +241,9 @@ const createSagaMiddleware = () => {
                     }
                     break;
                 case 'DELAY':
-                    setTimeout(() => {!currentTask.cancelled && next(true);}, effect.wait);
+                    setTimeout(() => {
+                        next(true);
+                    }, effect.wait);
                     break;
                 case 'SELECT':
                     const {
