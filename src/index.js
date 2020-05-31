@@ -3,7 +3,7 @@ import {
 } from '@babel/core'; // 错误提示做得比babylon好一点
 import * as t from '@babel/types';
 import * as effectRoot from './effects';
-const finalTaskPlugin = {
+const finalTaskPlugin = {// 将finally语句转化为回调函数
     visitor: {
         FunctionDeclaration(path) {
             const {
@@ -37,7 +37,7 @@ const finalTaskPlugin = {
                                             type
                                         }
                                     } = memberPath;
-                                    if (/__WEBPACK_IMPORTED_MODULE_/.test(name)) {
+                                    if (/__WEBPACK_IMPORTED_MODULE_/.test(name)) {// 替换webpack转化的代码
                                         const {
                                             node: {
                                                 property: {
@@ -132,11 +132,11 @@ const createSagaMiddleware = () => {
                             finalTaskPlugin,
                         ]
                     }).code);
-                    gen && (newTask.gen = gen.bind(effectRoot, ...a));
+                    gen && (newTask.finalJob = gen.bind(effectRoot, ...a));// 为最终的回调绑定作用域(effect api作用域)。
                     next(newTask); // 将newTask返回，然后可以通过CANCEL effect进行取消。
-                    run(newTask, {
+                    run(newTask, { // 通过run启动新的saga任务
                         fromFork: true,
-                    }); // 通过saga开启的新任务，肯定是generator函数返回值，所以要用run来真正开启
+                    });
                     break;
                 case 'CALL':
                     ({
@@ -167,9 +167,9 @@ const createSagaMiddleware = () => {
                     break;
                 case 'CANCELLED':
                     const {
-                        cancelled, gen: g
+                        cancelled, finalJob: g
                     } = currentTask;
-                    if (cancelled && typeof g === 'function') {
+                    if (cancelled && typeof g === 'function') { // saga任务已经取消且finalJob存在则运行finalJob回调
                         run(g);
                     }
                     next(false);
@@ -187,11 +187,11 @@ const createSagaMiddleware = () => {
                         length,
                     } = args;
                     const cb = args[length - 1];
-                    if (typeof cb !== 'function') {
+                    if (typeof cb !== 'function') {// 最后一个参数不为回调则在参数列表中添加一个回调。
                         const cb = (err, msg) => {
                             try {
                                 if (err) throw err;
-                                next(msg);
+                                next(msg); // 使用saga提供的回调则会执行cps effect后面的代码。
                             } catch (e) {
                                 console.error(e);
                             }
@@ -217,7 +217,7 @@ const createSagaMiddleware = () => {
                             });
                             const genCache = []
                             fromRaceGen.forEach(g => {
-                                g.return();
+                                g.return();// 一个saga任务有了结果则取消其它任务。
                                 genCache.push(g);
                             });
                             for (const g of genCache) {
@@ -257,12 +257,12 @@ const createSagaMiddleware = () => {
             }
         }
 
-        const run = (generator, {
+        const run = (generator, {// 第二个参数改为选项对象，方便扩展
             next: callback,
             fromFork,
         } = {}) => {
             const it = typeof generator[Symbol.iterator] == 'function' ? generator : generator();
-            fromRace && fromRaceGen.add(it);
+            fromRace && fromRaceGen.add(it);// 缓存来自race effect的saga任务。
             let recursiveCount = 0;
             const next = (nextValue) => {
                 ++recursiveCount;
@@ -291,7 +291,7 @@ const createSagaMiddleware = () => {
                         callback(effect)
                     }
                 }
-                if (fromFork) {
+                if (fromFork) {// 若为fork产生的新saga任务，则每一步都推迟到宏任务中。
                     setTimeout(innerCall);
                 } else {
                     innerCall();
@@ -299,7 +299,7 @@ const createSagaMiddleware = () => {
             }
             next();
         }
-        sagaMiddleware.run = (g) => run(g); // 返回的sagaMiddleware的run方法不支持回调
+        sagaMiddleware.run = (g) => run(g); // 返回的sagaMiddleware的run方法不支持回调(暂定)
         return next => action => {
             channel.publish(action);
             return next(action);
