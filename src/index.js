@@ -51,11 +51,14 @@ const createSagaMiddleware = () => {
                     next(effect.action);
                     break;
                 case 'FORK':
-                    const newTask = effect.task(...effect.args);
+                    const {
+                        task, args: a
+                    } = effect;
+                    const newTask = task.call(effect, ...a);
+                    run(newTask, {
+                        fromFork: true,
+                    }); // 通过saga开启的新任务，肯定是generator函数返回值，所以要用run来真正开启
                     next(newTask); // 将newTask返回，然后可以通过CANCEL effect进行取消。
-                    setTimeout(() => {
-                        run(newTask); // 通过saga开启的新任务，肯定是generator函数返回值，所以要用run来真正开启
-                    })
                     break;
                 case 'CALL':
                     ({
@@ -68,7 +71,9 @@ const createSagaMiddleware = () => {
                     } = getCallbackFromFirst(first));
                     const ret = fn.call(context, ...args);
                     if (typeof ret[Symbol.iterator] === 'function') {
-                        run(ret, next); // 是genenrator函数时
+                        run(ret, {
+                            next
+                        }); // 是genenrator函数时
                     } else if (typeof ret.then === 'function') {
                         ret.then(next);
                     } else {
@@ -76,7 +81,10 @@ const createSagaMiddleware = () => {
                     }
                     break;
                 case 'CANCEL':
-                    effect.task.return();
+                    setTimeout(() => {
+                        effect.task.return();
+                        effect.task.next(true);
+                    })
                     next();
                     break;
                 case 'CANCELLED':
@@ -125,6 +133,7 @@ const createSagaMiddleware = () => {
                             });
                             fromRaceGen.forEach(g => {
                                 g.return();
+                                fromRaceGen.delete(g);
                             });
                         }
                         fromRace = true;
@@ -158,7 +167,10 @@ const createSagaMiddleware = () => {
             }
         }
 
-        const run = (generator, callback) => {
+        const run = (generator, {
+            next: callback,
+            fromFork,
+        } = {}) => {
             const it = typeof generator[Symbol.iterator] == 'function' ? generator : generator();
             fromRace && fromRaceGen.add(it);
             let recursiveCount = 0;
@@ -166,24 +178,33 @@ const createSagaMiddleware = () => {
                 ++recursiveCount;
                 if (recursiveCount >= 1000)
                     return;
-                const {
-                    done,
-                    value: effect
-                } = it.next(nextValue);
-                if (!done) {
-                    if (!effect) {
-                        next(effect);
-                    } else if (typeof effect[Symbol.iterator] == 'function') {
-                        run(effect, next);
-                    } else if (typeof effect.then == 'function') {
-                        effect.then(next);
-                    } else if (!effect.type) {
-                        next(effect);
-                    } else {
-                        handleEffect(effect, next);
+                const innerCall = () => {
+                    const {
+                        done,
+                        value: effect
+                    } = it.next(nextValue);
+                    if (!done) {
+                        if (!effect) {
+                            next(effect);
+                        } else if (typeof effect[Symbol.iterator] == 'function') {
+                            run(effect, {
+                                next
+                            });
+                        } else if (typeof effect.then == 'function') {
+                            effect.then(next);
+                        } else if (!effect.type) {
+                            next(effect);
+                        } else {
+                            handleEffect(effect, next);
+                        }
+                    } else if (typeof callback === 'function') {
+                        callback(effect)
                     }
-                } else if (typeof callback === 'function') {
-                    callback(effect)
+                }
+                if (fromFork) {
+                    setTimeout(innerCall);
+                } else {
+                    innerCall();
                 }
             }
             next();
