@@ -13,7 +13,7 @@ const sagaMiddlware1 = createSagaMiddleware1();
 const composeEnhancer = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
 const store = createStore(reducers, composeEnhancer(applyMiddleware(sagaMiddlware, sagaMiddlware1)));
 // sagaMiddleware就是一个执行器，可以启动helloSaga这个Generator函数的执行
-sagaMiddlware.run(rootSaga, (...args)=>console.log('>>>>$$$$', ...args));
-sagaMiddlware1.run(rootSaga1, (...args)=>console.log('jfkdlsjf$$$$', ...args));
+sagaMiddlware.run(rootSaga);
+sagaMiddlware1.run(rootSaga1);
 window.store = store;
 export default store;

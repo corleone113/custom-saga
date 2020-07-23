@@ -1,6 +1,5 @@
 import {
     delay,
-    // call
     put,
     cancel,
     fork,
@@ -13,29 +12,29 @@ import * as types from '../action-types';
 function* start() {
     try {
         while (true) {
-            const r = yield put({
+            const decrement1 = yield put({
                 type: types.DECREMENT1
             });
-            const r1 = yield delay(333);
-            console.log('print at async2 and delay result?', r, r1);
+            const dealyRet = yield delay(333);
+            console.log('print at async2 and delay result?', decrement1, dealyRet);
         }
     } finally {
         const cresult = yield cancelled();
         console.log('the cancelled result:', cresult, );
         if (cresult) {
-            console.log('全体起立!!!!!!!!!!!!!!');
+            console.log('cancelled');
         }
-        const nrm = yield put({
+        const decrement2 = yield put({
             type: types.DECREMENT1
         });
-        console.log('the nrm in the custom aysn2:', nrm);
+        console.log('the decrement2 in the custom aysn2:', decrement2);
     }
 }
 export function* asyncDecrement() {
     try {
         const task = yield fork(start);
         const normal = yield {
-            type: 'FUCK1'
+            type: 'SOME1',
         };
         console.log('>>>', normal);
         yield delay(1000);

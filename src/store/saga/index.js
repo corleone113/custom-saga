@@ -12,7 +12,6 @@ import {
 } from './loginSaga'
 import raceSaga from './raceSaga'
 import reace2Saga from './race2Saga'
-// import testSaga from './call_test';
 
 // watcherSaga 监听向仓库派发动作的，蒋婷到某些动作会通过workerSaga去执行
 
@@ -25,6 +24,5 @@ export default function* rootSaga() {
         // watchIncrementAsync(),
         //  watchDecrementAsync(), 
         watchCounterAsync(),
-        // testSaga(),
     ]);
 }
