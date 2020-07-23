@@ -2,7 +2,10 @@ import {
     all
 } from '@/redux-saga/effects'
 
-
+// import {
+//     watchIncrementAsync,
+//     watchDecrementAsync
+// } from './counterSaga'
 import {watchCounterAsync} from './async1'
 import raceSaga from './raceSaga'
 import reace2Saga from './race2Saga'
@@ -15,5 +18,7 @@ export default function* rootSaga() {
         raceSaga(), 
         reace2Saga(), 
         watchCounterAsync(),
+        // watchIncrementAsync(),
+        // watchDecrementAsync(),
     ]);
 }

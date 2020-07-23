@@ -18,11 +18,11 @@ import reace2Saga from './race2Saga'
 // rootSaga 是saga用来组织和调用别的saga generator函数
 export default function* rootSaga() {
     yield all([
-        raceSaga(), 
-        reace2Saga(), 
+        raceSaga(),
+        reace2Saga(),
         watchLogin(),
         // watchIncrementAsync(),
-        //  watchDecrementAsync(), 
+        // watchDecrementAsync(),
         watchCounterAsync(),
     ]);
 }
