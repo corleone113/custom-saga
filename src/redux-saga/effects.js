@@ -1,13 +1,13 @@
 export function take(actionType) {
     return {
         type: 'TAKE',
-        actionType
+        actionType // 监听的action类型
     }
 }
 export function put(action) {
     return {
         type: 'PUT',
-        action
+        action // 派发的action
     }
 }
 export function delay(wait) {
@@ -26,8 +26,8 @@ export function select(selector, ...args) {
 export function fork(task, ...args) {
     return {
         type: 'FORK',
-        task,
-        args,
+        task, // saga任务
+        args, // 携带的额外参数
     }
 }
 // takeEvery相当于要开启一个新的子例程，单独监听actionType
