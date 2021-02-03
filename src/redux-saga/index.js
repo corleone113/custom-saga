@@ -2,7 +2,8 @@ import { transform } from '@babel/core'; // 错误提示做得比babylon好一�
 import * as t from '@babel/types';
 
 const channel = createChannel(); // channel对象用于缓存/执行那些订阅了某个action的回调
-const fromRaceSagaIts = new Set(); // 缓存由于RACE Effect产生的新的saga迭代器。
+const raceEffectToSaga = new Map(); // 缓存由于RACE Effect产生的新的saga迭代器。
+const raceEffectStask = [];
 let fromRace = false; // 标识RACE Effect是否正在启动其中的effect
 let dispatch, getState; // 保存来自store.dispatchh和store.getState
 
@@ -27,7 +28,7 @@ function run(
   } = {}
 ) {
   const it = typeof saga[Symbol.iterator] == 'function' ? saga : saga();
-  fromRace && fromRaceSagaIts.add(it); // 缓存由于RACE Effect产生的新的saga迭代器。
+  fromRace && raceEffectToSaga.set(raceEffectStask.pop(), it); // 缓存由于RACE Effect产生的新的saga迭代器。
   let iteractionCount = 0; // 记录saga执行次数
   if (fromFork) {
     // 若为fork产生的新saga任务，则推迟到下一轮事件循环启动。
@@ -167,13 +168,16 @@ function handleEffect(effect, next, currentTask) {
                   [k]: v,
                 }
           );
-          fromRaceSagaIts.forEach((g) => {
-            // 取消其它effect的处理。
-            g.return();
-            fromRaceSagaIts.delete(g); // 在缓存中删除该effect。
+          raceEffectToSaga.forEach((saga, raceEffect) => {
+            // 取消同一个race任务发起的其它effect的saga。
+            if (raceEffect === effect) {
+              saga.return();
+              raceEffectToSaga.delete(raceEffect); // 在缓存中删除该effect对应的记录。
+            }
           });
         };
         fromRace = true; // 从现在开始处理的effect都来自RACE Effect
+        raceEffectStask.push(effect);
         if (Array.isArray(effects)) {
           // 批量处理的effect保存在数组中
           for (let i = 0; i < effects.length; ++i) {
